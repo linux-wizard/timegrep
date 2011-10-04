@@ -1,0 +1,18 @@
+timegrep.py by Dennis Williamson 20100113
+in response to http://serverfault.com/questions/101744/fast-extraction-of-a-time-range-from-syslog-logfile
+Improvements by Fabrice FACORAT 201109614
+
+Perform a binary search through a log file to find a range of times
+and print the corresponding lines
+Log file date time format at the beginning of the line :
+YYYY-mm-dd HH:MM:SS <log content>
+
+tested with Python 2.6
+
+TODO: Make sure that it works if the seek falls in the middle of
+      the first or last line
+TODO: Make sure it's not blind to a line where the sync read falls
+      exactly at the beginning of the line being searched for and
+      then gets skipped by the second read
+TODO: Support more log time format
+TODO: Support case when log files may not be properly sorted ( remove superfluous lines )
