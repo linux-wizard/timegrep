@@ -23,54 +23,6 @@ from optparse import OptionParser
 
 MATCH_STR  = ""
 
-# Allow to disable python traceback message when doing CTRL+C
-def suppress_keyboard_interrupt_message():
-    old_excepthook = sys.excepthook
-
-    def new_hook(type, value, traceback):
-        if type != KeyboardInterrupt:
-            old_excepthook(type, value, traceback)
-        else:
-            pass
-
-    sys.excepthook = new_hook
-
-# Function to read lines from file and extract the date and time
-def getdata():
-    """Read a line from a file
-
-    Return a tuple containing:
-        the date/time in a format such as 'Jan 15 20:14:01'
-        the line itself
-
-    The last colon and seconds are optional and
-    not handled specially
-
-    """
-    try:
-        line = handle.readline(bufsize)
-    except:
-        print >> sys.stderr, "[ERROR] File I/O Error"
-        exit(1)
-    if line == '':
-        if debug > 0: print("EOF reached")
-        exit(1)
-    if line[-1] == '\n':
-        line = line.rstrip('\n')
-    else:
-        if len(line) >= bufsize:
-            print >> sys.stderr, "Line length exceeds buffer size"
-        else:
-            print >> sys.stderr, "Missing newline"
-        exit(1)
-    words = line.split(' ')
-    if len(words) >= 2:
-        linedate = words[0] + " " + words[1]
-    else:
-        linedate = ''
-    return (linedate, line)
-# End function getdata()
-
 # Allow to convert from month names to month number
 MONTH_LOOKUP = {
     "Jan" : "01",
@@ -87,27 +39,85 @@ MONTH_LOOKUP = {
     "Dec" : "12",
 }
 
-def makedatestr(date_text):
+def suppress_keyboard_interrupt_message():
     """
-    date_text has to be in format DD/mmm/YYYY/HH:MM[:SS]
-	
-	Return string "YYYYMMDD:HH:MM[:SS]
+    Allow to disable python traceback message when doing CTRL+C
+    """
+    old_excepthook = sys.excepthook
 
-    If it can't be parsed properly then it just returns
-    an empty string.
+    def new_hook(type, value, traceback):
+        if type != KeyboardInterrupt:
+            old_excepthook(type, value, traceback)
+        else:
+            pass
+
+    sys.excepthook = new_hook
+
+# Function to read lines from file and extract the date and time
+def getdata(date_format):
+    """Read a line from a file
+    
+    @return : Return a tuple containing:
+        the date/time in a format such as 'Jan 15 20:14:01'
+        the line itself
+
+    The last colon and seconds are optional and
+    not handled specially
 
     """
     try:
-        _date, _time = date_text.split(":", 1)
-        day, month, year = _date.split("/")
-        linedate = year + MONTH_LOOKUP[month] + day + ":" + _time
-    except Exception, e:
-        linedate = ''
+        #line = handle.readline(bufsize)
+ 	line = handle.readline()
+    except:
+        print >> sys.stderr, "[ERROR] File I/O Error"
+        exit(1)
+    if line == '':
+        if debug > 0: print("EOF reached")
+        exit(1)
+    if line[-1] == '\n':
+        line = line.rstrip('\n')
+    else:
+        if len(line) >= bufsize:
+            print >> sys.stderr, "Line length exceeds buffer size"
+        else:
+            print >> sys.stderr, "Missing newline"
+        exit(1)
+    if debug > 1: print("get line: " + line)
+    linedate = make_date_str(line, date_format)
+    return (linedate, line)
+# End function getdata()
+
+
+def make_date_str(logline,date_format):
+    """ Convert a log date time information format to inernal timegrep forma
+
+    Function allowing to convert log file date format to internal timegrep date time format
+    @param logline log file line containing normally a date time entry
+    @param date_format date format to parse the log file date time
+    @return string return log file date time as internal timegrep date time format ( YYYYMMDD HH:MM:SS )
+    """
+    #try:
+    m = re.match(date_format,logline)
+    if m is None:
+	print >> sys.stderr, "failed to match '{0}'".format(date_format)
+	return ''
+
+    match_array = m.groupdict()
+    d_year = match_array['YEAR'] if 'YEAR' in match_array else CURRENT_YEAR
+    d_month = match_array['MONTH'] if 'MONTH' in match_array  else MONTH_LOOKUP[match_array['MONTH_NAME']]
+    d_day = match_array['DAY']
+    d_hour = match_array['HOURS']
+    d_min = match_array['MINUTES']
+    d_sec = match_array['SECONDS'] if 'SECONDS' in match_array else '00'
+    linedate = "{0}-{1}-{2} {3}:{4}:{5}".format(d_year, d_month, d_day, d_hour, d_min, d_sec)
+    #linedate = d_year + '-' + d_month + '-' + d_day + " " + d_hour + ':' + d_min + ':' + d_sec
+    #except Exception, e:
+     #   linedate = '0000000000000000000000'
 
     return linedate
 
 # Allow to detect log date-time format
-def getdateformat():
+def detect_date_format():
     """
     log_line contains the first line of the log file
     regexps are applied to try to detect the log format
@@ -131,39 +141,40 @@ def getdateformat():
             print >> sys.stderr, "Missing newline"
         exit(1)
     
-
+    if debug > 1: print("Analyzed line: " + line)
     # match %Y-%m-%d %H:%M:%S ( W3C Extended Log Format ? ) 
-    m = re.match("(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (\S+) (?P<HOUR>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})")
+    m = re.match("(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", line)
     if m is None:
 	if debug > 1: print("Log date format doesn't match W3C Extended Log format")
-    else
+    else:
 	if debug > 1: print("Matching log format found : W3C Extended Log format")
-	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (\S+) (?P<HOUR>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
+	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (\S+) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
     # match %b %d %H:%M:%S ( Syslog Log Format )
-    m = re.match("(?P<MONTH>[a-zA-Z]{3}) (\S+) (?P<DAY>[0-9]{2}) (?P<HOUR>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})")
+    m = re.match("(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", line)
     if m is None:
 	if debug > 1: print("Log date format doesn't match Syslog Log format")
-    else
+    else:
 	if debug > 1: print("Matching log format found : Syslog Log format")
-	match_regexp  = "(?P<MONTH>[a-zA-Z]{3}) (\S+) (?P<DAY>[0-9]{2}) (?P<HOUR>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
+	match_regexp  = "(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
     # match host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ] ( NCSA Common Log format )
-    m = re.match("^([\d.]+) (\S+) (\S+) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOUR>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (\s[+\-]\d{4})\]", line)
+    m = re.match("^([\d.]+)  \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (\s[+\-]\d{4})\]", line)
     if m is None:
 	if debug > 1: print("Log date format doesn't match NSCA Common Log format")
-    else
+    else:
 	if debug > 1: print("Matching log format found : NSCA Common Log format")
-	match_regexp  = "^([\d.]+) (\S+) (\S+) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOUR>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})(\s[+\-]\d{4})\]"
+	match_regexp  = "^([\d.]+)  \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})(\s[+\-]\d{4})\]"
 	return match_regexp
-
+    return None
 
 
 # Set up option handling
 
 now = datetime.now()
+CURRENT_YEAR = now.year
 parser = OptionParser(version = "%prog " + version)
 
 parser.usage = "%prog [options] filename\n"
@@ -213,6 +224,9 @@ if options.date:
 else:
     selecteddate = now.strftime("%Y-%m-%d")
 
+if not options.start_time and not options.end_time:
+    parser.error("you need to specify at least a start time or an end time")
+
 if options.start_time:
     start_time = options.start_time
 else:
@@ -241,7 +255,7 @@ if not p.match(start_time) or not p.match(end_time):
 previousday = date.fromordinal(datetime.strptime(selecteddate, "%Y-%m-%d").toordinal()-1).strftime("%Y-%m-%d")
 selectedday = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y-%m-%d")
 
-searchdate = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y-%m-%d")
+searchdate = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y%m%d")
 
 searchstart = searchdate + " " + start_time
 searchend = searchdate + " " + end_time
@@ -280,23 +294,22 @@ pos1 = pos2  = 0
 if debug > 0: print("File: '{0}' Size: {1} Date: '{2}' Now: {3} Start: '{4}' End: '{5}'".format(log_file, size, selectedday, now, searchstart, searchend))
 if debug > 0: print("Timerange: '{0}' Endrange: {1} ".format(timerange,endrange))
 
-date_format = getdateformat()
+date_format = detect_date_format()
 
 suppress_keyboard_interrupt_message()
 
 # Seek using binary search
 while pos1 != endrange and oldmidrange != 0 and linedate != searchstart:
     handle.seek(timerange)
-    linedate, line = getdata(date_format
-)    # sync to line ending
+    linedate, line = getdata(date_format)    # sync to line ending
     pos1 = handle.tell()
     if timerange > 0:             # if not BOF, discard first read
         if debug > 1: print("...partial: (len: {0}) '{1}'".format((len(line)), line))
-        linedate, line = getdata()
+        linedate, line = getdata(date_format)
 
     pos2 = handle.tell()
     count += 1
-    if debug > 0: print("#{0} Beg: {1} Mid: {2} End: {3} P1: {4} P2: {5} Timestamp: '{6}'".format(count, beginrange, timerange, endrange, pos1, pos2, linedate))
+    if debug > 0: print("#{0} Beg: {1} Mid: {2} End: {3} P1: {4} P2: {5} Current Timestamp: '{6}'".format(count, beginrange, timerange, endrange, pos1, pos2, linedate))
     if  searchstart > linedate:
         beginrange = timerange
     else:
@@ -319,16 +332,16 @@ while linedate >= searchstart and seek > 0:
     if debug > 0: print("...rewinding")
     handle.seek(seek)
 
-    linedate, line = getdata()    # sync to line ending
+    linedate, line = getdata(date_format)    # sync to line ending
     if debug > 1: print("...junk: '{0}'".format(line))
 
-    linedate, line = getdata()
+    linedate, line = getdata(date_format)
     if debug > 0: print("...comparing: '{0}'".format(linedate))
 
 # Scan forward
 while linedate < searchstart:
     if debug > 0: print("...skipping: '{0}'".format(linedate))
-    linedate, line = getdata()
+    linedate, line = getdata(date_format)
 
 if debug > 0: print("...found: '{0}'".format(line))
 
@@ -340,7 +353,7 @@ if debug > 0: print("Beg: {0} Mid: {1} End: {2} P1: {3} P2: {4} Timestamp: '{5}'
 
 while linedate <= searchend:
     print line
-    linedate, line = getdata()
+    linedate, line = getdata(date_format)
 
 if debug > 0: print("Start: '{0}' End: '{1}'".format(searchstart, searchend))
 handle.close()
