@@ -56,14 +56,13 @@ def suppress_keyboard_interrupt_message():
 # Function to read lines from file and extract the date and time
 def getdata(date_format):
     """Read a line from a file
-    
+    @param date_format detected date log format regexp
     @return : Return a tuple containing:
-        the date/time in a format such as 'Jan 15 20:14:01'
+        the date/time in a format such as 'YYYYmmdd HH:MM:SS'
         the line itself
 
     The last colon and seconds are optional and
     not handled specially
-
     """
     try:
         #line = handle.readline(bufsize)
@@ -96,10 +95,10 @@ def make_date_str(logline,date_format):
     @param date_format date format to parse the log file date time
     @return string return log file date time as internal timegrep date time format ( YYYYMMDD HH:MM:SS )
     """
-    #try:
+    
     m = re.match(date_format,logline)
     if m is None:
-	print >> sys.stderr, "failed to match '{0}'".format(date_format)
+	if debug > 0: print >> sys.stderr, "failed to match '{0}'".format(date_format)
 	return ''
 
     match_array = m.groupdict()
@@ -109,10 +108,7 @@ def make_date_str(logline,date_format):
     d_hour = match_array['HOURS']
     d_min = match_array['MINUTES']
     d_sec = match_array['SECONDS'] if 'SECONDS' in match_array else '00'
-    linedate = "{0}-{1}-{2} {3}:{4}:{5}".format(d_year, d_month, d_day, d_hour, d_min, d_sec)
-    #linedate = d_year + '-' + d_month + '-' + d_day + " " + d_hour + ':' + d_min + ':' + d_sec
-    #except Exception, e:
-     #   linedate = '0000000000000000000000'
+    linedate = "{0}{1}{2} {3}:{4}:{5}".format(d_year, d_month, d_day, d_hour, d_min, d_sec)
 
     return linedate
 
@@ -125,7 +121,7 @@ def detect_date_format():
     """
     # read first log line
     try:
-        line = handle.readline(bufsize)
+        line = handle.readline()
     except:
         print >> sys.stderr, "[ERROR] File I/O Error"
         exit(1)
@@ -147,7 +143,7 @@ def detect_date_format():
     if m is None:
 	if debug > 1: print("Log date format doesn't match W3C Extended Log format")
     else:
-	if debug > 1: print("Matching log format found : W3C Extended Log format")
+	if debug > 0: print("Matching log format found : W3C Extended Log format")
 	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (\S+) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
@@ -156,7 +152,7 @@ def detect_date_format():
     if m is None:
 	if debug > 1: print("Log date format doesn't match Syslog Log format")
     else:
-	if debug > 1: print("Matching log format found : Syslog Log format")
+	if debug > 0: print("Matching log format found : Syslog Log format")
 	match_regexp  = "(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
@@ -165,7 +161,7 @@ def detect_date_format():
     if m is None:
 	if debug > 1: print("Log date format doesn't match NSCA Common Log format")
     else:
-	if debug > 1: print("Matching log format found : NSCA Common Log format")
+	if debug > 0: print("Matching log format found : NSCA Common Log format")
 	match_regexp  = "^([\d.]+)  \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})(\s[+\-]\d{4})\]"
 	return match_regexp
     return None
@@ -184,7 +180,7 @@ A date may be specified instead. Seconds are optional in time arguments."
 
 parser.add_option("-d", "--date", action = "store", dest = "date",
                 default = "",
-                help = "Use the supplied date instead of today.")
+                help = "Use the supplied date instead of today in the form YYYY-mm-dd")
 
 parser.add_option("", "--start-time", action = "store", dest = "start_time",
                 default = "",
@@ -215,9 +211,6 @@ else:
 
 if options.longout and options.shortout:
     parser.error("options -l and -s are mutually exclusive")
-
-#if options.date:
-#    parser.error("date option not yet implemented")
 
 if options.date:
     selecteddate = options.date
@@ -277,8 +270,8 @@ limit   = 75  	# arbitrary, allow for a VERY large file, but stop it if it runs 
 count   = 0
 size    = os.stat(log_file)[ST_SIZE]
 
-# Use bigger rewind/limit values for big log files ( > 4Go )
-if size > 4000000:
+# Use bigger rewind/limit values for big log files ( > 2Go )
+if size > 2000000:
 	rewind  = 100000
 	limit   = 75000
 
@@ -295,6 +288,9 @@ if debug > 0: print("File: '{0}' Size: {1} Date: '{2}' Now: {3} Start: '{4}' End
 if debug > 0: print("Timerange: '{0}' Endrange: {1} ".format(timerange,endrange))
 
 date_format = detect_date_format()
+if date_format is None:
+   print >> sys.stderr, "[ERROR]: Unable to detect date format or date format not supported"
+   exit(1)
 
 suppress_keyboard_interrupt_message()
 
