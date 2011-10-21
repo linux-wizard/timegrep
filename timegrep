@@ -144,7 +144,7 @@ def detect_date_format():
 	if debug > 1: print("Log date format doesn't match W3C Extended Log format")
     else:
 	if debug > 0: print("Matching log format found : W3C Extended Log format")
-	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (\S+) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
+	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
     # match %b %d %H:%M:%S ( Syslog Log Format )
