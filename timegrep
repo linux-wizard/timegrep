@@ -39,6 +39,13 @@ MONTH_LOOKUP = {
     "Dec" : "12",
 }
 
+def debug_msg(msg_txt, msg_level):
+    """
+    Allow to show debug messages depending on the debug level
+    """
+    if debug > msg_level: print msg_txt
+
+
 def suppress_keyboard_interrupt_message():
     """
     Allow to disable python traceback message when doing CTRL+C
@@ -71,7 +78,7 @@ def getdata(date_format):
         print >> sys.stderr, "[ERROR] File I/O Error"
         exit(1)
     if line == '':
-        if debug > 0: print("EOF reached")
+        debug_msg("EOF reached",0)
         exit(1)
     if line[-1] == '\n':
         line = line.rstrip('\n')
@@ -81,7 +88,7 @@ def getdata(date_format):
         else:
             print >> sys.stderr, "Missing newline"
         exit(1)
-    if debug > 1: print("get line: " + line)
+    debug_msg("get line: " + line,1)
     linedate = make_date_str(line, date_format)
     return (linedate, line)
 # End function getdata()
@@ -126,7 +133,7 @@ def detect_date_format():
         print >> sys.stderr, "[ERROR] File I/O Error"
         exit(1)
     if line == '':
-        if debug > 0: print("EOF reached")
+        debug_msg("EOF reached",0)
         exit(1)
     if line[-1] == '\n':
         line = line.rstrip('\n')
@@ -137,31 +144,31 @@ def detect_date_format():
             print >> sys.stderr, "Missing newline"
         exit(1)
     
-    if debug > 1: print("Analyzed line: " + line)
+    debug_msg("Analyzed line: " + line, 1)
     # match %Y-%m-%d %H:%M:%S ( W3C Extended Log Format ? ) 
     m = re.match("(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", line)
     if m is None:
-	if debug > 1: print("Log date format doesn't match W3C Extended Log format")
+	debug_msg("Log date format doesn't match W3C Extended Log format",1)
     else:
-	if debug > 0: print("Matching log format found : W3C Extended Log format")
+	debug_msg("Matching log format found : W3C Extended Log format",1)
 	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
     # match %b %d %H:%M:%S ( Syslog Log Format )
     m = re.match("(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", line)
     if m is None:
-	if debug > 1: print("Log date format doesn't match Syslog Log format")
+	debug_msg("Log date format doesn't match Syslog Log format",1)
     else:
-	if debug > 0: print("Matching log format found : Syslog Log format")
+	debug_msg("Matching log format found : Syslog Log format",1)
 	match_regexp  = "(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
 	return match_regexp
 
     # match host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ] ( NCSA Common Log format )
     m = re.match("(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]", line)
     if m is None:
-	if debug > 1: print("Log date format doesn't match NSCA Common Log format")
+	debug_msg("Log date format doesn't match NSCA Common Log format",1)
     else:
-	if debug > 0: print("Matching log format found : NSCA Common Log format")
+	debug_msg("Matching log format found : NSCA Common Log format",1)
 	match_regexp  = "(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]"
 	return match_regexp
     return None
@@ -284,8 +291,8 @@ linedate     = ''
 
 pos1 = pos2  = 0
 
-if debug > 0: print("File: '{0}' Size: {1} Date: '{2}' Now: {3} Start: '{4}' End: '{5}'".format(log_file, size, selectedday, now, searchstart, searchend))
-if debug > 0: print("Timerange: '{0}' Endrange: {1} ".format(timerange,endrange))
+debug_msg("File: '{0}' Size: {1} Date: '{2}' Now: {3} Start: '{4}' End: '{5}'".format(log_file, size, selectedday, now, searchstart, searchend),0)
+debug_msg("Timerange: '{0}' Endrange: {1} ".format(timerange,endrange),0)
 
 date_format = detect_date_format()
 if date_format is None:
@@ -300,12 +307,12 @@ while pos1 != endrange and oldmidrange != 0 and linedate != searchstart:
     linedate, line = getdata(date_format)    # sync to line ending
     pos1 = handle.tell()
     if timerange > 0:             # if not BOF, discard first read
-        if debug > 1: print("...partial: (len: {0}) '{1}'".format((len(line)), line))
+        debug_msg("...partial: (len: {0}) '{1}'".format((len(line)), line),1)
         linedate, line = getdata(date_format)
 
     pos2 = handle.tell()
     count += 1
-    if debug > 0: print("#{0} Beg: {1} Mid: {2} End: {3} P1: {4} P2: {5} Current Timestamp: '{6}'".format(count, beginrange, timerange, endrange, pos1, pos2, linedate))
+    debug_msg("#{0} Beg: {1} Mid: {2} End: {3} P1: {4} P2: {5} Current Timestamp: '{6}'".format(count, beginrange, timerange, endrange, pos1, pos2, linedate),0)
     if  searchstart > linedate:
         beginrange = timerange
     else:
@@ -316,7 +323,7 @@ while pos1 != endrange and oldmidrange != 0 and linedate != searchstart:
         print >> sys.stderr, "[ERROR]: ITERATION LIMIT EXCEEDED"
         exit(1)
 
-if debug > 0: print("...stopping: '{0}'".format(line))
+debug_msg("...stopping: '{0}'".format(line),0)
 
 # Rewind a bit to make sure we didn't miss any
 seek = oldmidrange
@@ -325,23 +332,23 @@ while linedate >= searchstart and seek > 0:
         seek = 0
     else:
         seek = seek - rewind
-    if debug > 0: print("...rewinding")
+    debug_msg("...rewinding",0)
     handle.seek(seek)
 
     linedate, line = getdata(date_format)    # sync to line ending
-    if debug > 1: print("...junk: '{0}'".format(line))
+    debug_msg("...junk: '{0}'".format(line),0)
 
     linedate, line = getdata(date_format)
-    if debug > 0: print("...comparing: '{0}'".format(linedate))
+    debug_msg("...comparing: '{0}'".format(linedate),0)
 
 # Scan forward
 while linedate < searchstart:
-    if debug > 0: print("...skipping: '{0}'".format(linedate))
+    debug_msg("...skipping: '{0}'".format(linedate),0)
     linedate, line = getdata(date_format)
 
-if debug > 0: print("...found: '{0}'".format(line))
+debug_msg("...found: '{0}'".format(line),0)
 
-if debug > 0: print("Beg: {0} Mid: {1} End: {2} P1: {3} P2: {4} Timestamp: '{5}'".format(beginrange, timerange, endrange, pos1, pos2, linedate))
+debug_msg("Beg: {0} Mid: {1} End: {2} P1: {3} P2: {4} Timestamp: '{5}'".format(beginrange, timerange, endrange, pos1, pos2, linedate),0)
 
 # Now that the preliminaries are out of the way, we just loop,
 #     reading lines and printing them until they are
@@ -351,5 +358,5 @@ while linedate <= searchend:
     print line
     linedate, line = getdata(date_format)
 
-if debug > 0: print("Start: '{0}' End: '{1}'".format(searchstart, searchend))
+debug_msg("Start: '{0}' End: '{1}'".format(searchstart, searchend),0)
 handle.close()
