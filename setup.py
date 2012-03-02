@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='timegrep',
-      version='1.2',
+      version='1.3',
       description='Perform a binary search through a log file to find a range of times and print the corresponding lines',
       author='Fabrice FACORAT',
       author_email='fabrice.facorat@gmail.com',
