@@ -23,6 +23,17 @@ from optparse import OptionParser
 
 MATCH_STR  = ""
 
+logformat_list = []
+# W3C Extended
+logformat_list.append({'regexp':"(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"W3C Extended", 'description':"%Y-%m-%d %H:%M:%S"})
+# Syslog
+logformat_list.append({'regexp':"(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"Syslog", 'description':"%b %d %H:%M:%S"})
+# NSCA Common
+logformat_list.append({'regexp':"(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]", 'name':"NSCA Common", 'description':"host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ]"})
+# Bind8
+logformat_list.append({'regexp':"(?P<DAY>[0-9]{2})\-(?P<MONTH_NAME>[a-zA-Z]{3})\-(?P<YEAR>[0-9]{4}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})\.", 'name':"Bind8", 'description':"%d-%b-%Y %H:%M:%S."})
+
+
 # Allow to convert from month names to month number
 MONTH_LOOKUP = {
     "Jan" : "01",
@@ -145,34 +156,16 @@ def detect_date_format():
         exit(1)
     
     debug_msg("Analyzed line: " + line, 1)
-    # match %Y-%m-%d %H:%M:%S ( W3C Extended Log Format ? ) 
-    m = re.match("(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", line)
-    if m is None:
-	debug_msg("Log date format doesn't match W3C Extended Log format",1)
-    else:
-	debug_msg("Matching log format found : W3C Extended Log format",1)
-	match_regexp  = "(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
-	return match_regexp
-
-    # match %b %d %H:%M:%S ( Syslog Log Format )
-    m = re.match("(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", line)
-    if m is None:
-	debug_msg("Log date format doesn't match Syslog Log format",1)
-    else:
-	debug_msg("Matching log format found : Syslog Log format",1)
-	match_regexp  = "(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})"
-	return match_regexp
-
-    # match host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ] ( NCSA Common Log format )
-    m = re.match("(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]", line)
-    if m is None:
-	debug_msg("Log date format doesn't match NSCA Common Log format",1)
-    else:
-	debug_msg("Matching log format found : NSCA Common Log format",1)
-	match_regexp  = "(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]"
-	return match_regexp
-    return None
-
+    match_regexp = None
+    for current_format in logformat_list:
+	m = re.match(current_format['regexp'],line)
+	if m is None:
+		debug_msg("Log date format doesn't match " + current_format['name'] + " Log Format",1)
+	else:
+		debug_msg("Matching log format found : " + current_format['name'] + " Log format",1)
+		match_regexp = current_format['regexp']
+		break
+    return match_regexp
 
 # Set up option handling
 
