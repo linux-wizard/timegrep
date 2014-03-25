@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
 version = "1.0"
 
 import os, sys
+import ast
 from stat import *
 from datetime import date, datetime
 import re
@@ -27,12 +28,11 @@ logformat_list = []
 # W3C Extended
 logformat_list.append({'regexp':"(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"W3C Extended", 'description':"%Y-%m-%d %H:%M:%S"})
 # Syslog
-logformat_list.append({'regexp':"(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{1,2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"Syslog", 'description':"%b %d %H:%M:%S"})
+logformat_list.append({'regexp':"(?P<MONTH_NAME>[a-zA-Z]{3}) (?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"Syslog", 'description':"%b %d %H:%M:%S"})
 # NSCA Common
-logformat_list.append({'regexp':"(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{1,2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]", 'name':"NSCA Common", 'description':"host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ]"})
+logformat_list.append({'regexp':"(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]", 'name':"NSCA Common", 'description':"host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ]"})
 # Bind8
-logformat_list.append({'regexp':"(?P<DAY>[0-9]{1,2})\-(?P<MONTH_NAME>[a-zA-Z]{3})\-(?P<YEAR>[0-9]{4}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})\.", 'name':"Bind8", 'description':"%d-%b-%Y %H:%M:%S."})
-
+logformat_list.append({'regexp':"(?P<DAY>[0-9]{2})\-(?P<MONTH_NAME>[a-zA-Z]{3})\-(?P<YEAR>[0-9]{4}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})\.", 'name':"Bind8", 'description':"%d-%b-%Y %H:%M:%S."})
 
 # Allow to convert from month names to month number
 MONTH_LOOKUP = {
@@ -202,6 +202,10 @@ parser.add_option("-D", "--debug", action = "store", dest = "debug",
                 default = 0, type = "int",
                 help = "Output debugging information.\t\t\t\t\tNone (default) = %default, Some = 1, More = 2")
 
+parser.add_option("-L", "--log-regexp", action = "store", dest = "logregexp",
+				default = None,
+				help = "Add one or more log formats from a file.")
+
 (options, args) = parser.parse_args()
 
 if not 0 <= options.debug <= 2:
@@ -229,6 +233,11 @@ if options.end_time:
     end_time = options.end_time
 else:
     end_time = "23:59:59"
+
+if options.logregexp:
+	regexpfile = options.logregexp
+else:
+	regexpfile = ""
 
 if len(args) != 1:
     parser.error("Invalid number of arguments")
@@ -286,6 +295,16 @@ pos1 = pos2  = 0
 
 debug_msg("File: '{0}' Size: {1} Date: '{2}' Now: {3} Start: '{4}' End: '{5}'".format(log_file, size, selectedday, now, searchstart, searchend),0)
 debug_msg("Timerange: '{0}' Endrange: {1} ".format(timerange,endrange),0)
+
+if regexpfile != "":
+	try:
+		format_handle = open(regexpfile,'r')
+	except:
+	    print >> sys.stderr, "[ERROR] Error while opening file {0}".format(regexpfile)
+	    exit(1)
+	for format_line in format_handle:
+		logformat_list.append(ast.literal_eval(format_line))
+	format_handle.close()		
 
 date_format = detect_date_format()
 if date_format is None:
