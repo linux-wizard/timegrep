@@ -122,7 +122,7 @@ def make_date_str(logline,date_format):
     match_array = m.groupdict()
     d_year = match_array['YEAR'] if 'YEAR' in match_array else CURRENT_YEAR
     d_month = match_array['MONTH'] if 'MONTH' in match_array  else MONTH_LOOKUP[match_array['MONTH_NAME']]
-    d_day = match_array['DAY']
+    d_day = match_array['DAY'].zfill(2)
     d_hour = match_array['HOURS']
     d_min = match_array['MINUTES']
     d_sec = match_array['SECONDS'] if 'SECONDS' in match_array else '00'
