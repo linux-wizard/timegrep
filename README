@@ -9,7 +9,11 @@ Supported Log Formats:
 - Syslog: %b %d %H:%M:%S
 - NSCA Common/Apache: host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ]
 - Bind8: %d-%b-%Y %H:%M:%S.
+- Nginx Error logs: %Y/%m/%d %H:%M:%S.
 Tested with Python 2.6
+
+You can install it using :
+    pip install timegrep
 
 TODO: Make sure that it works if the seek falls in the middle of
       the first or last line
@@ -18,4 +22,4 @@ TODO: Make sure it's not blind to a line where the sync read falls
       then gets skipped by the second read
 DONE: Support more log time format
 TODO: Support case when log files may not be properly sorted ( remove superfluous lines )
-TODO: Support on the fly log format definition with --log-regexp
+DONE: Support on the fly log format definition with --log-regexp
