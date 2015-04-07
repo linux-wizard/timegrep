@@ -13,7 +13,9 @@ Supported Log Formats:
 Tested with Python 2.6
 
 You can install it using :
-    pip install timegrep
+```
+   pip install timegrep
+```
 
 TODO: Make sure that it works if the seek falls in the middle of
       the first or last line
