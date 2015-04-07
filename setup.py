@@ -7,7 +7,7 @@ setup(name='timegrep',
       description='Perform a binary search through a log file to find a range of times and print the corresponding lines',
       author='Fabrice FACORAT',
       author_email='fabrice.facorat@gmail.com',
-      url='https://github.com/linux-wizard',
+      url='https://github.com/linux-wizard/timegrep',
       scripts = ["timegrep"],
       classifiers=[
       'Development Status :: 4 - Beta',
