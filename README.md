@@ -2,7 +2,9 @@
 
 by Dennis Williamson 20100113
 in response to http://serverfault.com/questions/101744/fast-extraction-of-a-time-range-from-syslog-logfile
+
 Improvements by Fabrice FACORAT 20110914
+---
 
 Perform a binary search through a log file to find a range of times
 and print the corresponding lines
