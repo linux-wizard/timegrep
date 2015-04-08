@@ -1,4 +1,6 @@
-# timegrep.py by Dennis Williamson 20100113
+# timegrep.py
+======
+by Dennis Williamson 20100113
 in response to http://serverfault.com/questions/101744/fast-extraction-of-a-time-range-from-syslog-logfile
 Improvements by Fabrice FACORAT 20110914
 
@@ -14,7 +16,7 @@ Tested with Python 2.6
 
 You can install it using :
 
-   pip install timegrep
+    pip install timegrep
 
 ---
 TODO: Make sure that it works if the seek falls in the middle of
