@@ -1,5 +1,5 @@
 # timegrep.py
-======
+
 by Dennis Williamson 20100113
 in response to http://serverfault.com/questions/101744/fast-extraction-of-a-time-range-from-syslog-logfile
 Improvements by Fabrice FACORAT 20110914
@@ -21,9 +21,13 @@ You can install it using :
 ---
 TODO: Make sure that it works if the seek falls in the middle of
       the first or last line
+
 TODO: Make sure it's not blind to a line where the sync read falls
       exactly at the beginning of the line being searched for and
       then gets skipped by the second read
+
 DONE: Support more log time format
+
 TODO: Support case when log files may not be properly sorted ( remove superfluous lines )
+
 DONE: Support on the fly log format definition with --log-regexp
