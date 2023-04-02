@@ -1,0 +1,31 @@
+---
+default_stages: [commit, push]
+repos:
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.4.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies:
+          - "@commitlint/config-conventional"
+          - conventional-changelog-conventionalcommits
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+
+  - repo: https://github.com/pylint-dev/pylint
+    rev: v2.17.1
+    hooks:
+      - id: pylint
+        args:
+          - --max-line-length=80
+          - --ignore-imports=yes
+          - --disable=F0401,W0141,W0611,W0110,W0703,W0142,C0103,E0401,R0912,R0915,R0801,W0201
+          - --module-naming-style=PascalCase
