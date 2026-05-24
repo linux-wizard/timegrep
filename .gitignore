@@ -118,3 +118,8 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# VS Code
+.vscode/
+.vscode-test/
+*.code-workspace
