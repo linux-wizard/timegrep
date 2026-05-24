@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -13,28 +13,51 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-version = "1.5"
 
-import os, sys
+import os
+import sys
 import ast
-from stat import *
-from datetime import date, datetime
+from stat import ST_SIZE
+from datetime import datetime
 import re
-from optparse import OptionParser
+import argparse
+from typing import TextIO, Pattern, Match
+
+# handle long lines, but put a limit them
+DEFAULT_READ_BUFFSIZE = int(4096)
+# arbitrary, the optimal value is highly dependent on the structure of the file
+DEFAULT_REWIND_OFFSET = int(100)
+# arbitrary, allow for a VERY large file, but stop it if it runs away
+DEFAULT_MAX_ITERATION = int(75)
 
 MATCH_STR  = ""
 
 logformat_list = []
 # W3C Extended
-logformat_list.append({'regexp':"(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"W3C Extended", 'description':"%Y-%m-%d %H:%M:%S"})
+# pylint: disable-next=line-too-long
+logformat_list.append({'regexp': r"(?P<YEAR>[0-9]{4})\-(?P<MONTH>[0-9]{2})\-(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})",
+                       'name':"W3C Extended",
+                       'description':"%Y-%m-%d %H:%M:%S"})
 # Syslog
-logformat_list.append({'regexp':"(?P<MONTH_NAME>[a-zA-Z]{3}) {1,2}(?P<DAY>[0-9]{1,2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"Syslog", 'description':"%b %d %H:%M:%S"})
+# pylint: disable-next=line-too-long
+logformat_list.append({'regexp':r"(?P<MONTH_NAME>[a-zA-Z]{3}) {1,2}(?P<DAY>[0-9]{1,2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})",
+                       'name':"Syslog",
+                       'description':"%b %d %H:%M:%S"})
 # NSCA Common
-logformat_list.append({'regexp':"(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{1,2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]", 'name':"NSCA Common", 'description':"host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ]"})
+# pylint: disable-next=line-too-long
+logformat_list.append({'regexp':r"(?P<origin>\d+\.\d+\.\d+\.\d+) (?P<identd>-|\w*) (?P<auth>-|\w*) \[(?P<DAY>[0-9]{1,2})/(?P<MONTH_NAME>[a-zA-Z]{3})/(?P<YEAR>[0-9]{4}):(?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2}) (?P<tz>[\-\+]?\d\d\d\d)\]",
+                       'name':"NSCA Common",
+                       'description':"host rfc931 username [%d/%b/%Y:%H:%M:%S +TZ]"})
 # Bind8
-logformat_list.append({'regexp':"(?P<DAY>[0-9]{1,2})\-(?P<MONTH_NAME>[a-zA-Z]{3})\-(?P<YEAR>[0-9]{4}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})\.", 'name':"Bind8", 'description':"%d-%b-%Y %H:%M:%S."})
+# pylint: disable-next=line-too-long
+logformat_list.append({'regexp':r"(?P<DAY>[0-9]{1,2})\-(?P<MONTH_NAME>[a-zA-Z]{3})\-(?P<YEAR>[0-9]{4}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})\.",
+                       'name':"Bind8",
+                       'description':"%d-%b-%Y %H:%M:%S."})
 # Nginx Error
-logformat_list.append({'regexp':"(?P<YEAR>[0-9]{4})/(?P<MONTH>[0-9]{2})/(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})", 'name':"Nginx Error", 'description':"%Y/%m/%d %H:%M:%S"})
+# pylint: disable-next=line-too-long
+logformat_list.append({'regexp':r"(?P<YEAR>[0-9]{4})/(?P<MONTH>[0-9]{2})/(?P<DAY>[0-9]{2}) (?P<HOURS>[0-9]{2}):(?P<MINUTES>[0-9]{2}):(?P<SECONDS>[0-9]{2})",
+                       'name':"Nginx Error",
+                       'description':"%Y/%m/%d %H:%M:%S"})
 
 # Allow to convert from month names to month number
 MONTH_LOOKUP = {
@@ -52,31 +75,31 @@ MONTH_LOOKUP = {
     "Dec" : "12",
 }
 
-def debug_msg(msg_txt, msg_level):
+def _no_traceback_excepthook(exc_type, exc_val, traceback):
+    """
+    Allow to disable python traceback message when doing CTRL+C
+    https://stackoverflow.com/a/74525682
+    """
+    if isinstance(exc_val, KeyboardInterrupt):
+        return
+    sys.__excepthook__(exc_type, exc_val, traceback)
+
+sys.excepthook = _no_traceback_excepthook
+
+def debug_msg(msg_txt: str, msg_level = 0):
     """
     Allow to show debug messages depending on the debug level
     """
-    if debug > msg_level: print msg_txt
-
-
-def suppress_keyboard_interrupt_message():
-    """
-    Allow to disable python traceback message when doing CTRL+C
-    """
-    old_excepthook = sys.excepthook
-
-    def new_hook(type, value, traceback):
-        if type != KeyboardInterrupt:
-            old_excepthook(type, value, traceback)
-        else:
-            pass
-
-    sys.excepthook = new_hook
+    if DEBUG_LEVEL > msg_level:
+        print(msg_txt)
 
 # Function to read lines from file and extract the date and time
-def getdata(date_format):
+def getdata(date_format: str, file_handle: TextIO,
+            read_buffer_size=DEFAULT_READ_BUFFSIZE):
     """Read a line from a file
     @param date_format detected date log format regexp
+    @param file_handle file_handle used to read line
+    @param read_buffer_size max log line size
     @return : Return a tuple containing:
         the date/time in a format such as 'YYYYmmdd HH:MM:SS'
         the line itself
@@ -85,55 +108,59 @@ def getdata(date_format):
     not handled specially
     """
     try:
-        #line = handle.readline(bufsize)
- 	line = handle.readline()
-    except:
-        print >> sys.stderr, "[ERROR] File I/O Error"
-        exit(1)
+        line = file_handle.readline()
+    except IOError as e_error:
+        print(f"[ERROR] File I/O Error: {e_error}", file=sys.stderr)
+        sys.exit(1)
     if line == '':
         debug_msg("EOF reached",0)
-        exit(1)
+        sys.exit(1)
     if line[-1] == '\n':
         line = line.rstrip('\n')
     else:
-        if len(line) >= bufsize:
-            print >> sys.stderr, "Line length exceeds buffer size"
+        if len(line) >= read_buffer_size:
+            print(f"Line length exceeds buffer size {read_buffer_size}b", file=sys.stderr)
         else:
-            print >> sys.stderr, "Missing newline"
-        exit(1)
-    debug_msg("get line: " + line,1)
+            print("Missing newline", file=sys.stderr)
+        sys.exit(1)
+    debug_msg(f"get line: {line}",1)
     linedate = make_date_str(line, date_format)
     return (linedate, line)
 # End function getdata()
 
 
-def make_date_str(logline,date_format):
-    """ Convert a log date time information format to inernal timegrep forma
+def make_date_str(logline: str, date_format: str):
+    """Convert a log date time information format to inernal timegrep format
 
-    Function allowing to convert log file date format to internal timegrep date time format
-    @param logline log file line containing normally a date time entry
-    @param date_format date format to parse the log file date time
-    @return string return log file date time as internal timegrep date time format ( YYYYMMDD HH:MM:SS )
+    Args:
+        logline (str): line containing normally a date time entry
+        date_format (str): date format to parse the log file date time
+
+    Returns:
+        str: log file date time as internal date time format ( YYYYMMDD HH:MM:SS )
     """
-    
-    m = re.match(date_format,logline)
-    if m is None:
-	if debug > 0: print >> sys.stderr, "failed to match '{0}'".format(date_format)
-	return ''
 
-    match_array = m.groupdict()
+    match_obj = re.match(date_format,logline)
+    if match_obj is None:
+        if DEBUG_LEVEL > 0:
+            print(f"failed to match {date_format}", file=sys.stderr)
+        return ''
+
+    match_array = match_obj.groupdict()
     d_year = match_array['YEAR'] if 'YEAR' in match_array else CURRENT_YEAR
-    d_month = match_array['MONTH'] if 'MONTH' in match_array  else MONTH_LOOKUP[match_array['MONTH_NAME']]
+    d_month = match_array['MONTH'] if 'MONTH' in match_array else MONTH_LOOKUP[match_array['MONTH_NAME']]
     d_day = match_array['DAY'].zfill(2)
     d_hour = match_array['HOURS']
     d_min = match_array['MINUTES']
     d_sec = match_array['SECONDS'] if 'SECONDS' in match_array else '00'
-    linedate = "{0}{1}{2} {3}:{4}:{5}".format(d_year, d_month, d_day, d_hour, d_min, d_sec)
+    linedate = f"{d_year}{d_month}{d_day} {d_hour}:{d_min}:{d_sec}"
 
     return linedate
+# End function make_date_str()
 
 # Allow to detect log date-time format
-def detect_date_format():
+def detect_date_format(file_handle: TextIO,
+                       read_buffer_size=DEFAULT_READ_BUFFSIZE):
     """
     log_line contains the first line of the log file
     regexps are applied to try to detect the log format
@@ -141,79 +168,82 @@ def detect_date_format():
     """
     # read first log line
     try:
-        line = handle.readline()
-    except:
-        print >> sys.stderr, "[ERROR] File I/O Error"
-        exit(1)
+        line = file_handle.readline()
+    except IOError as io_e_error:
+        print(f"[ERROR] File I/O Error: {io_e_error}", file=sys.stderr)
+        sys.exit(1)
     if line == '':
         debug_msg("EOF reached",0)
-        exit(1)
+        sys.exit(1)
     if line[-1] == '\n':
         line = line.rstrip('\n')
     else:
-        if len(line) >= bufsize:
-            print >> sys.stderr, "Line length exceeds buffer size"
+        if len(line) >= read_buffer_size:
+            print("Line length exceeds buffer size", file=sys.stderr)
         else:
-            print >> sys.stderr, "Missing newline"
-        exit(1)
-    
+            print("Missing newline", file=sys.stderr)
+        sys.exit(1)
+
     debug_msg("Analyzed line: " + line, 1)
     match_regexp = None
     for current_format in logformat_list:
-	m = re.match(current_format['regexp'],line)
-	if m is None:
-		debug_msg("Log date format doesn't match " + current_format['name'] + " Log Format",1)
-	else:
-		debug_msg("Matching log format found : " + current_format['name'] + " Log format",1)
-		match_regexp = current_format['regexp']
-		break
+        match_regexp = re.match(current_format['regexp'],line)
+        if match_regexp is None:
+            debug_msg("Log date format doesn't match " + current_format['name'] + " Log Format",1)
+        else:
+            debug_msg("Matching log format found : " + current_format['name'] + " Log format",1)
+            match_regexp = current_format['regexp']
+            break
     return match_regexp
 
-# Set up option handling
 
-now = datetime.now()
-CURRENT_YEAR = now.year
-parser = OptionParser(version = "%prog " + version)
+CURRENT_DATETIME = datetime.now()
+CURRENT_YEAR = CURRENT_DATETIME.year
 
-parser.usage = "%prog [options] filename\n"
 
-parser.description = "Search a log file for a range of times occurring today. \
-A date may be specified instead. Seconds are optional in time arguments."
+parser = argparse.ArgumentParser(
+    description=("Search a log file for a range of times occurring today.\n"
+                "A date may be specified instead. Seconds are optional in time arguments."))
 
-parser.add_option("-d", "--date", action = "store", dest = "date",
+# parser.usage = "%prog [options] filename\n"
+
+
+parser.add_argument("-d", "--date", action = "store", dest = "date",
                 default = "",
                 help = "Use the supplied date instead of today in the form YYYY-mm-dd")
 
-parser.add_option("", "--start-time", action = "store", dest = "start_time",
+parser.add_argument("", "--start-time", action = "store", dest = "start_time",
                 default = "",
                 help = "Display lines from start time in the form hh:mm[:ss]")
 
-parser.add_option("", "--end-time", action = "store", dest = "end_time",
+parser.add_argument("", "--end-time", action = "store", dest = "end_time",
                 default = "",
                 help = "Display line before end time in the form hh:mm[:ss]")
 
-parser.add_option("-l", "--long", action = "store_true", dest = "longout",
+parser.add_argument("-l", "--long", action = "store_true", dest = "longout",
                 default = False,
                 help = "Span the longest possible time range.")
 
-parser.add_option("-s", "--short", action = "store_true", dest = "shortout",
+parser.add_argument("-s", "--short", action = "store_true", dest = "shortout",
                 default = False,
                 help = "Span the shortest possible time range.")
 
-parser.add_option("-D", "--debug", action = "store", dest = "debug",
+parser.add_argument("-D", "--debug", action = "store", dest = "debug",
                 default = 0, type = "int",
-                help = "Output debugging information.\t\t\t\t\tNone (default) = %default, Some = 1, More = 2")
+                help = ('Output debugging information.'
+                        '\t\t\t\t\tNone (default) = %default, Some = 1, More = 2'))
 
-parser.add_option("-L", "--log-regexp", action = "store", dest = "logregexp",
-				default = None,
-				help = "Add one or more log formats from a file.")
+parser.add_argument("-L", "--log-regexp", action = "store", dest = "logregexp",
+                default = None,
+                help = "Add one or more log formats from a file.")
 
 (options, args) = parser.parse_args()
 
 if not 0 <= options.debug <= 2:
     parser.error("debug level out of range")
 else:
-    debug = options.debug    # 1 = print some debug output, 2 = print a little more, 0 = none
+    # 1 = print some debug output, 2 = print a little more, 0 = none
+    DEBUG_LEVEL = int(options.debug)
 
 if options.longout and options.shortout:
     parser.error("options -l and -s are mutually exclusive")
@@ -221,156 +251,169 @@ if options.longout and options.shortout:
 if options.date:
     selecteddate = options.date
 else:
-    selecteddate = now.strftime("%Y-%m-%d")
+    selecteddate = CURRENT_DATETIME.strftime("%Y-%m-%d")
 
 if not options.start_time and not options.end_time:
     parser.error("you need to specify at least a start time or an end time")
 
-if options.start_time:
-    start_time = options.start_time
-else:
-    start_time = "00:00:00"
-
-if options.end_time:
-    end_time = options.end_time
-else:
-    end_time = "23:59:59"
-
-if options.logregexp:
-	regexpfile = options.logregexp
-else:
-	regexpfile = ""
+start_time = options.start_time if options.start_time else str("00:00:00")
+end_time = options.end_time if options.end_time else str("23:59:59")
+regexp_file = options.logregexp if options.logregexp else ""
 
 if len(args) != 1:
     parser.error("Invalid number of arguments")
 
-
-log_file  = args[0]
+log_file = args[0]
 
 # test for times to be properly formatted, allow hh:mm or hh:mm:ss
 p = re.compile(r'(^[2][0-3]|[0-1][0-9]):[0-5][0-9](:[0-5][0-9])?$')
 
 if not p.match(start_time) or not p.match(end_time):
     print("Invalid time specification")
-    exit(1)
+    sys.exit(1)
 
+def main():
+    """
+    main
+    """
 
-# Determine Time Range
-previousday = date.fromordinal(datetime.strptime(selecteddate, "%Y-%m-%d").toordinal()-1).strftime("%Y-%m-%d")
-selectedday = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y-%m-%d")
+    rewind_offset = DEFAULT_REWIND_OFFSET
+    max_iteration = DEFAULT_MAX_ITERATION
 
-searchdate = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y%m%d")
+    # Determine Time Range
+    # previousday = date.fromordinal(
+    #     datetime.strptime(selecteddate, "%Y-%m-%d").toordinal()-1).strftime("%Y-%m-%d")
+    selectedday = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y-%m-%d")
 
-searchstart = searchdate + " " + start_time
-searchend = searchdate + " " + end_time
+    searchdate  = datetime.strptime(selecteddate, "%Y-%m-%d").strftime("%Y%m%d")
 
-if searchend < searchstart:
-    print >> sys.stderr, "[ERROR] End time should be superior to start time"
-    exit(1)
+    searchstart = searchdate + " " + start_time
+    searchend   = searchdate + " " + end_time
 
-try:
-    handle = open(log_file,'r')
-except:
-    print >> sys.stderr, "[ERROR] Error while opening file {0}".format(log_file)
-    exit(1)
+    if searchend < searchstart:
+        print("[ERROR] End time should be superior to start time", file=sys.stderr)
+        sys.exit(1)
 
-# Set some initial values
-bufsize = 4096  # handle long lines, but put a limit them
-rewind  = 100  	# arbitrary, the optimal value is highly dependent on the structure of the file
-limit   = 75  	# arbitrary, allow for a VERY large file, but stop it if it runs away
-count   = 0
-size    = os.stat(log_file)[ST_SIZE]
+    # Set some initial values
 
-# Use bigger rewind/limit values for big log files ( > 2Go )
-if size > 2000000:
-	rewind  = 100000
-	limit   = 75000
+    count   = int(0)
+    log_file_size    = os.stat(log_file)[ST_SIZE]
 
-beginrange   = 0
-#timerange    = int(size * ( float(hourindex) / 24 ))
-timerange     = size / 2
-oldmidrange  = timerange
-endrange     = size
-linedate     = ''
+    # Use bigger REWIND_OFFSET/MAX_ITERATION values for big log files ( > 2Go )
+    if log_file_size > 2000000:
+        rewind_offset = 100000
+        max_iteration = 75000
 
-pos1 = pos2  = 0
+    beginrange   = 0
+    #timerange    = int(size * ( float(hourindex) / 24 ))
+    timerange     = log_file_size / 2
+    oldmidrange  = timerange
+    endrange     = log_file_size
+    linedate     = ''
 
-debug_msg("File: '{0}' Size: {1} Date: '{2}' Now: {3} Start: '{4}' End: '{5}'".format(log_file, size, selectedday, now, searchstart, searchend),0)
-debug_msg("Timerange: '{0}' Endrange: {1} ".format(timerange,endrange),0)
+    pos1 = pos2  = 0
 
-if regexpfile != "":
-	try:
-		format_handle = open(regexpfile,'r')
-	except:
-	    print >> sys.stderr, "[ERROR] Error while opening file {0}".format(regexpfile)
-	    exit(1)
-	for format_line in format_handle:
-		logformat_list.append(ast.literal_eval(format_line))
-	format_handle.close()		
+    debug_msg(f"File: '{log_file}' Size: {log_file_size} Date: '{selectedday}' "
+              f"Now: {CURRENT_DATETIME} Start: '{searchstart}' End: '{searchend}'",0)
+    debug_msg(f"Timerange: '{timerange}' Endrange: {endrange} ",0)
 
-date_format = detect_date_format()
-if date_format is None:
-   print >> sys.stderr, "[ERROR]: Unable to detect date format or date format not supported"
-   exit(1)
+    if regexp_file != "":
+        try:
+            with open(regexp_file, 'r', encoding='UTF8') as format_handle_f:
+                for format_line in format_handle_f:
+                    logformat_list.append(ast.literal_eval(format_line))
+            format_handle_f.close()
+        except IOError as io_e_error:
+            print(f"[ERROR] Error while opening file {regexp_file}: {io_e_error}", file=sys.stderr)
+            sys.exit(1)
 
-suppress_keyboard_interrupt_message()
+    # Open log file and detect format. File stays open for binary search.
+    try:
+        f_handle = open(log_file, "r")
+    except IOError as io_e_error:
+        print(f"[ERROR] Error while opening file {log_file}: {io_e_error}", file=sys.stderr)
+        sys.exit(1)
 
-# Seek using binary search
-while pos1 != endrange and oldmidrange != 0 and linedate != searchstart:
-    handle.seek(timerange)
-    linedate, line = getdata(date_format)    # sync to line ending
-    pos1 = handle.tell()
-    if timerange > 0:             # if not BOF, discard first read
-        debug_msg("...partial: (len: {0}) '{1}'".format((len(line)), line),1)
-        linedate, line = getdata(date_format)
+    detected_date_format = detect_date_format(f_handle)
+    if detected_date_format is None:
+        print("[ERROR]: Unable to detect date format or date format not supported", file=sys.stderr)
+        sys.exit(1)
 
-    pos2 = handle.tell()
-    count += 1
-    debug_msg("#{0} Beg: {1} Mid: {2} End: {3} P1: {4} P2: {5} Current Timestamp: '{6}'".format(count, beginrange, timerange, endrange, pos1, pos2, linedate),0)
-    if  searchstart > linedate:
-        beginrange = timerange
-    else:
-        endrange = timerange
-    oldmidrange = timerange
-    timerange = (beginrange + endrange) / 2
-    if count > limit:
-        print >> sys.stderr, "[ERROR]: ITERATION LIMIT EXCEEDED"
-        exit(1)
+    # _suppress_keyboard_interrupt_message()
 
-debug_msg("...stopping: '{0}'".format(line),0)
+    # Seek using binary search algorithm
+    # f_handle remains open throughout entire search and output loop
+    # (see line 410 for explicit close)
+    while pos1 != endrange and oldmidrange != 0 and linedate != searchstart:
+        f_handle.seek(timerange)
+        linedate, line = getdata(date_format=detected_date_format,
+                                 file_handle=f_handle)    # sync to line ending
+        pos1 = f_handle.tell()
+        if timerange > 0:             # if not BOF, discard first read
+            debug_msg(f"...partial: (len: {len(line)}) '{line}'",
+                      msg_level=1)
+            linedate, line = getdata(date_format=detected_date_format,
+                                     file_handle=f_handle)
 
-# Rewind a bit to make sure we didn't miss any
-seek = oldmidrange
-while linedate >= searchstart and seek > 0:
-    if seek < rewind:
-        seek = 0
-    else:
-        seek = seek - rewind
-    debug_msg("...rewinding",0)
-    handle.seek(seek)
+        pos2 = f_handle.tell()
+        count += 1
+        debug_msg(f"#{count} Beg: {beginrange} Mid: {timerange} End: {endrange} "
+                  f"P1: {pos1} P2: {pos2} Current Timestamp: '{linedate}'")
+        if  searchstart > linedate:
+            beginrange = timerange
+        else:
+            endrange = timerange
+        oldmidrange = timerange
+        timerange = (beginrange + endrange) // 2
+        if count > max_iteration:
+            print(f"[ERROR]: Number of iteration exceed MAX_ITERATION {max_iteration}",
+                  file=sys.stderr)
+            sys.exit(1)
 
-    linedate, line = getdata(date_format)    # sync to line ending
-    debug_msg("...junk: '{0}'".format(line),0)
+    debug_msg(f"...stopping: '{line}'",0)
 
-    linedate, line = getdata(date_format)
-    debug_msg("...comparing: '{0}'".format(linedate),0)
+    # Rewind a bit to make sure we didn't miss any
+    seek = oldmidrange
+    while linedate >= searchstart and seek > 0:
+        if seek < rewind_offset:
+            seek = 0
+        else:
+            seek = seek - rewind_offset
+        debug_msg("...rewinding",0)
+        f_handle.seek(seek)
 
-# Scan forward
-while linedate < searchstart:
-    debug_msg("...skipping: '{0}'".format(linedate),0)
-    linedate, line = getdata(date_format)
+        linedate, line = getdata(date_format=detected_date_format,
+                                 file_handle=f_handle)
+        debug_msg(f"...junk: '{line}'",0)
 
-debug_msg("...found: '{0}'".format(line),0)
+        linedate, line = getdata(date_format=detected_date_format,
+                                 file_handle=f_handle)
+        debug_msg(f"...comparing: '{linedate}'",0)
 
-debug_msg("Beg: {0} Mid: {1} End: {2} P1: {3} P2: {4} Timestamp: '{5}'".format(beginrange, timerange, endrange, pos1, pos2, linedate),0)
+    # Scan forward
+    while linedate < searchstart:
+        debug_msg(f"...skipping: '{linedate}'",0)
+        linedate, line = getdata(date_format=detected_date_format,
+                                 file_handle=f_handle)
 
-# Now that the preliminaries are out of the way, we just loop,
-#     reading lines and printing them until they are
-#     beyond the end of the range we want
+    debug_msg(f"...found: '{line}'",0)
 
-while linedate <= searchend:
-    print line
-    linedate, line = getdata(date_format)
+    debug_msg((f"Beg: {beginrange} Mid: {timerange} End: {endrange} "
+               f"P1: {pos1} P2: {pos2} Timestamp: '{linedate}'"),0)
 
-debug_msg("Start: '{0}' End: '{1}'".format(searchstart, searchend),0)
-handle.close()
+    # Now that the preliminaries are out of the way, we just loop,
+    #     reading lines and printing them until they are
+    #     beyond the end of the range we want
+
+    while linedate <= searchend:
+        print(line)
+        linedate, line = getdata(date_format=detected_date_format,
+                                  file_handle=f_handle)
+
+    debug_msg(f"Start: '{searchstart}' End: '{searchend}'",0)
+    # Explicitly close file (opened at line 332 with explicit open(),
+    # not a context manager, so close must be called explicitly)
+    f_handle.close()
+
+if __name__ == "__main__":
+    main()

@@ -71,6 +71,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+venv/
 build/
 develop-eggs/
 dist/
@@ -102,6 +103,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.pytest_cache/
 nosetests.xml
 coverage.xml
 *,cover
@@ -118,3 +120,8 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# VS Code
+.vscode/
+.vscode-test/
+*.code-workspace
